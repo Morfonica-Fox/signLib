@@ -3,6 +3,39 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.backends import default_backend
 import base64
 
+__doc__ = """\
+这是一个签名库 
+函数功能:
+str_to_pubkey(key_str) -> object: 将公钥字符串转换为公钥对象
+str_to_prikey(key_str) -> object: 将私钥字符串转换为私钥对象
+pubkey_to_str(pubkey, encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo) -> str: 将公钥对象转换为公钥字符串
+prikey_to_str(prikey, encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8) -> str: 将私钥对象转换为私钥字符串
+auto_prikey_to_str(prikey, encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8) -> str: 自动判断私钥对象或私钥字符串并转换为私钥字符串
+auto_pubkey_to_str(pubkey, encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo) -> str: 自动判断公钥对象或公钥字符串并转换为公钥字符串
+auto_str_to_prikey(key_str) -> object: 自动判断私钥字符串或私钥对象并转换为私钥对象
+auto_str_to_pubkey(key_str) -> object: 自动判断公钥字符串或公钥对象并转换为公钥对象
+sign(private_key: object, data: bytes, hash_method=hashes.SHA256, padding_method='PSS') -> str: 签名函数 输出为b85编码的签名字符串+b85编码的数据字符串
+verify(public_key: object, signatured_data: str, hash_method=hashes.SHA256, padding_method='PSS') -> tuple/bool: 验证签名函数 输入为b85编码的签名字符串+b85编码的数据字符串 当验证成功时返回True和数据字符串 否则返回False
+verify_key_line(key_line: list, trused_root_key: str='', hash_method=hashes.SHA256, padding_method='PSS') -> bool: 验证公钥链函数 输入为公钥链列表 输出为True/False
+gen_key_line(trused_root_key: str='', trused_root_key_pri: str='', keys: list=[], hash_method=hashes.SHA256, padding_method='PSS') -> list: 生成公钥链函数 输入为信任根公钥字符串、信任根私钥字符串、密钥列表[(公钥, 私钥)...]、哈希方法、填充方法 输出为公钥链列表
+dump_key_line(key_line) -> str: 将公钥链列表转换为字符串
+load_key_line(key_line) -> list: 将字符串转换为公钥链列表
+get_pubkey(key_line, index='last') -> str: 从公钥链获取公钥字符串
+默认导入的模块:
+cryptography.hazmat.primitives.hashes
+cryptography.hazmat.primitives.serialization
+cryptography.hazmat.primitives.asymmetric.padding
+cryptography.hazmat.primitives.asymmetric.rsa
+cryptography.hazmat.backends.default_backend
+base64
+新增的异常:
+ArgumentError
+MissingKeyError
+LotKeyError
+NotLoadedKeyError
+
+"""
+
 def str_to_pubkey(key_str):
     return serialization.load_pem_public_key(base64.b85decode(key_str.encode('utf-8')), backend=default_backend())
 
@@ -15,7 +48,19 @@ def pubkey_to_str(pubkey, encoding=serialization.Encoding.PEM, format=serializat
 def prikey_to_str(prikey, encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8):
     return base64.b85encode(prikey.private_bytes(encoding=encoding, format=format, encryption_algorithm=serialization.NoEncryption())).decode('utf-8')
 
-def sign(private_key, data, hash_method=hashes.SHA256, padding_method='PSS'):
+def auto_prikey_to_str(prikey, encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8):
+    return prikey if isinstance(prikey, str) else prikey_to_str(prikey, encoding, format)
+
+def auto_pubkey_to_str(pubkey, encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo):
+    return pubkey if isinstance(pubkey, str) else pubkey_to_str(pubkey, encoding, format)
+
+def auto_str_to_prikey(key_str):
+    return key_str if isinstance(key_str, rsa.RSAPrivateKey) else str_to_prikey(key_str)
+
+def auto_str_to_pubkey(key_str):
+    return key_str if isinstance(key_str, rsa.RSAPublicKey) else str_to_pubkey(key_str)
+
+def sign(private_key: object, data: bytes, hash_method=hashes.SHA256, padding_method='PSS'):
     if padding_method == 'PSS':
         padding_mth = padding.PSS(
         mgf=padding.MGF1(hash_method()),
@@ -25,13 +70,13 @@ def sign(private_key, data, hash_method=hashes.SHA256, padding_method='PSS'):
         padding_mth = padding.PKCS1v15()
     else:
         raise ArgumentError("padding_method must be 'PSS' or 'PKCS1v15'")
-    return base64.b85encode(str_to_prikey(private_key).sign(
+    return base64.b85encode(auto_str_to_prikey(private_key).sign(
         data,
         padding_mth,
         hash_method()
     )).decode('utf-8') + ' ' + base64.b85encode(data).decode('utf-8')
 
-def verify(public_key, signatured_data, hash_method=hashes.SHA256, padding_method='PSS'):
+def verify(public_key: object, signatured_data: str, hash_method=hashes.SHA256, padding_method='PSS'):
     signature, data = signatured_data.split(' ')
     try:
         if padding_method == 'PSS':
@@ -43,13 +88,13 @@ def verify(public_key, signatured_data, hash_method=hashes.SHA256, padding_metho
             padding_mth = padding.PKCS1v15()
         else:
             raise ArgumentError("padding_method must be 'PSS' or 'PKCS1v15'")
-        str_to_pubkey(public_key).verify(
+        auto_str_to_pubkey(public_key).verify(
             base64.b85decode(signature.encode('utf-8')),
             base64.b85decode(data.encode('utf-8')),
             padding_mth,
             hash_method()
         )
-        return (True, data)
+        return (True, base64.b85decode(data.encode('utf-8')).decode('utf-8'))
     except Exception as e:
         return False
 
@@ -69,123 +114,43 @@ class NotLoadedKeyError(MissingKeyError):
     def __init__(self, message):
         super().__init__(message)
 
-class Signer:
-    __doc__ = """\
-签名器类，用于签名和验证数据。
-Signer(数据[必须提供], 公钥链[可选], 信任的根公钥[可选], 私钥[可选])
-(当然了 你可以直接更改类中的属性 毕竟类没有提供修改属性的方法)
-trused_root_key str: 信任的根公钥，当自己不是根公钥时必须提供
-key_line list: [根公钥签名的公钥1, 公钥1签名的公钥2, 公钥2签名的公钥3, ..., 自己上级公钥签名的自己的公钥]
-注意: 在类中实际存储的公钥链是传入的公钥链反过来的 所以你在直接更改时需要注意
-private_key str: 自己的私钥
-public_key str: 自己的公钥
-sha_method str: 签名使用的哈希算法, 默认为SHA256"""
-    def __init__(self, data: bytes, key_line: list=[], trused_root_key: str=None, private_key: str=None, public_key: str=None, padding_method: str='PSS', hash_method: hashes=hashes.SHA256):
-        if len(key_line) == 0:
-            raise MissingKeyError("请至少提供自己的公钥!")
-        elif len(key_line) == 1 and trused_root_key is not None:
-            raise LotKeyError("请不要提供信任的根公钥!(当自己是根公钥时)")
-        elif len(key_line) > 1 and trused_root_key is None:
-            raise MissingKeyError("请提供信任的根公钥!(当自己不是根公钥时)")
-        self.trused_root_key = trused_root_key
-        self.key_line = list(key_line)
-        self.private_key = private_key
-        self.public_key = public_key
-        self.data = data
-        self.padding_method = padding_method
-        self.hash_method = hash_method
-    def sign_data(self):
-        if not self.private_key:
-            raise NotLoadedKeyError("请先加载私钥!")
-        return sign(self.private_key, self.data, self.hash_method, self.padding_method)
-    def verify_data(self, signatured_data):
-        if not self.public_key:
-            raise NotLoadedKeyError("请先加载公钥!")
-        return verify(self.public_key, signatured_data, self.hash_method, self.padding_method)
-    def verify_key_line(self):
-        if len(self.key_line) == 0:
-            raise MissingKeyError("请至少提供自己的公钥!")
-        if self.trused_root_key is None:
-            return True
-        last_trused_key = self.trused_root_key
-        for i in range(len(self.key_line)):
-            if i == 0:
-                if self.key_line[i] != self.trused_root_key:
-                    return False
-                continue
-            this = self.key_line[i].split('\t')
-            signatured_pub_key = this[1]
-            if not verify(last_trused_key, signatured_pub_key, self.hash_method, self.padding_method):
+def verify_key_line(key_line: list, trused_root_key: str='', hash_method: object=hashes.SHA256, padding_method: str='PSS'):
+    if len(key_line) == 0:
+        raise MissingKeyError("请至少提供自己的公钥!")
+    if trused_root_key == '':
+        raise NotLoadedKeyError("请先加载信任根公钥!")
+    last_trused_key = trused_root_key
+    for i in range(len(key_line)):
+        if i == 0:
+            if key_line[i] != trused_root_key:
                 return False
-            last_trused_key = this[0]
-        return True
-    def export_key_line(self):
-        return list(self.key_line)
-    def export_private_key(self):
-        return self.private_key
-    def export_public_key(self):
-        return self.public_key
+            continue
+        this = key_line[i].split('\t')
+        signatured_pub_key = this[1]
+        if not verify(last_trused_key, signatured_pub_key, hash_method, padding_method):
+            return False
+        last_trused_key = this[0]
+    return True
 
-# -------------测试代码--------------
+def dump_key_line(key_line):
+    return '\n'.join(key_line)
 
-# 生成3对公钥和私钥
-private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-)
+def load_key_line(key_line):
+    return key_line.split('\n')
 
-public_key = private_key.public_key()
+def get_pubkey(key_line, index: int='last'):
+    if index == 'last':
+        index = len(key_line) - 1
+    if index >= len(key_line):
+        raise IndexError("公钥索引越界!")
+    return key_line[0] if index == 0 else key_line[index].split('\t')[0]
 
-private_key2 = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-)
-
-public_key2 = private_key2.public_key()
-
-private_key3 = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-)
-
-public_key3 = private_key3.public_key()
-
-attacker_private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048,
-)
-
-attacker_public_key = attacker_private_key.public_key()
-
-# 公钥链
-key_line = [
-    pubkey_to_str(public_key), 
-    pubkey_to_str(public_key2) + '\t' +  sign(prikey_to_str(private_key), pubkey_to_str(public_key2).encode('utf-8')), 
-    pubkey_to_str(public_key3) + '\t' +  sign(prikey_to_str(private_key2), pubkey_to_str(public_key3).encode('utf-8'))
-]
-
-# 信任的根公钥
-trused_root_key = pubkey_to_str(public_key)
-
-# 要签名的数据
-data = "这是一个需要被签名的消息。".encode("utf-8")
-
-# 签名实例化
-signer = Signer(data, key_line=key_line, trused_root_key=trused_root_key, private_key=prikey_to_str(private_key3), public_key=pubkey_to_str(public_key3))
-print(signer.verify_data(signer.sign_data()))
-print(signer.verify_key_line())
-
-# 模拟公钥链被攻击
-
-key_line[0] = pubkey_to_str(attacker_public_key)
-
-signer.key_line = key_line
-
-print(signer.verify_key_line())
-
-key_line[0] = pubkey_to_str(public_key)
-key_line[1] = pubkey_to_str(attacker_public_key) + '\t' +  sign(prikey_to_str(private_key), pubkey_to_str(attacker_public_key).encode('utf-8'))
-
-signer.key_line = key_line
-
-print(signer.verify_key_line())
+def gen_key_line(trused_root_key: str='', trused_root_key_pri: str='', keys: list=[], hash_method: object=hashes.SHA256, padding_method: str='PSS'):
+    if len(keys) == 0 or trused_root_key == '':
+        return
+    temp = [trused_root_key]
+    prikeys = [trused_root_key_pri] + [pri_key for pub_key, pri_key in keys]
+    pubkeys = [trused_root_key] + [pub_key for pub_key, pri_key in keys]
+    for i, keys in enumerate(keys):
+        temp.append(auto_pubkey_to_str(pubkeys[0]) + '\t' + sign(prikeys[i], auto_pubkey_to_str(keys[0]), hash_method, padding_method))
+    return temp
