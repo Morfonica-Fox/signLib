@@ -1,0 +1,67 @@
+from signLib import *
+# -------------测试代码--------------
+
+# 生成3对公钥和私钥
+private_key = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048,
+)
+
+public_key = private_key.public_key()
+
+private_key2 = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048,
+)
+
+public_key2 = private_key2.public_key()
+
+private_key3 = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048,
+)
+
+public_key3 = private_key3.public_key()
+
+attacker_private_key = rsa.generate_private_key(
+    public_exponent=65537,
+    key_size=2048,
+)
+
+attacker_public_key = attacker_private_key.public_key()
+
+# 公钥链
+key_line = gen_key_line(public_key, private_key, [(public_key2, private_key2), (public_key3, private_key3)])
+
+# 打印公钥链
+print(dump_key_line(key_line))
+
+# 信任的根公钥
+trused_root_key = pubkey_to_str(public_key)
+
+# 要签名的数据
+data = "这是一个需要被签名的消息。".encode("utf-8")
+
+# 签名
+signatured_data = sign(prikey_to_str(private_key), data)
+
+# 验证签名
+result = verify(pubkey_to_str(public_key), signatured_data)
+print(result)
+
+# 验证签名链
+result = verify_key_line(key_line, trused_root_key)
+print(result)
+
+# 模拟攻击者篡改签名
+signatured_data = sign(prikey_to_str(attacker_private_key), data)
+
+# 验证签名
+result = verify(pubkey_to_str(public_key), signatured_data)
+print(result)
+
+# 模拟攻击者篡改签名链
+key_line[1] = pubkey_to_str(attacker_public_key) + '\t' +  sign(prikey_to_str(private_key), pubkey_to_str(attacker_public_key).encode('utf-8'))
+
+result = verify_key_line(key_line, trused_root_key)
+print(result)
